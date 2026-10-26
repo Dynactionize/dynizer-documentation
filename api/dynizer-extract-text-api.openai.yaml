@@ -1,0 +1,232 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Extract Text API
+  description: Apache Tika wrapper API for text extraction
+  contact:
+    name: Consono
+    email: info@consono.ai
+    url: https://consono.ai
+
+tags:
+  - name: Extract
+    description: Text extraction from documents
+  - name: State
+    description: State of the API
+  - name: Health check
+    description: Checks regarding the health of the service
+
+paths:
+  /extract:
+    post:
+      description: Submit a document for text extraction
+      operationId: postExtract
+      security:
+        - bearerAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/PostExtractRequest"
+      responses:
+        "202":
+          $ref: "#/components/responses/PostExtractResponse"
+        "400":
+          $ref: "#/components/responses/400ErrorResponse"
+        "503":
+          $ref: "#/components/responses/503ErrorResponse"
+        default:
+          $ref: "#/components/responses/DefaultErrorResponse"
+      tags:
+        - Extract
+
+  /state:
+    get:
+      description: Get state of the extract-text-api
+      operationId: getState
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/GetStateResponse"
+        default:
+          $ref: "#/components/responses/DefaultErrorResponse"
+      tags:
+        - State
+
+  /healthz:
+    get:
+      description: |
+        k8s style health check. Returns 200 if running correctly
+      operationId: getHealthz
+      responses:
+        "200":
+          description: "Health check successful"
+        "503":
+          $ref: "#/components/responses/503ErrorResponse"
+        default:
+          $ref: "#/components/responses/DefaultErrorResponse"
+      tags:
+        - Health check
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  requestBodies:
+    PostExtractRequest:
+      description: Extract text from a document
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ExtractRequest"
+
+  responses:
+    DefaultErrorResponse:
+      description: Unexpected error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    400ErrorResponse:
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    503ErrorResponse:
+      description: Service unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    PostExtractResponse:
+      description: Extract request accepted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ExtractAcceptedResponse"
+
+    GetStateResponse:
+      description: Get API state response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StateResponse"
+
+  schemas:
+    ID:
+      type: string
+      description: ID of an object.
+
+    RemoteID:
+      type: string
+      description: Remote ID from the API that requested the extraction.
+
+    Status:
+      type: string
+      description: Status of an extraction. Can be one of QUEUED|RUNNING|FAILED|SUCCESS.
+
+    Filetype:
+      type: string
+      description: Filetype of the document.
+
+    FiletypeConfig: {}
+
+    Base64Document:
+      type: object
+      description: Document serialized in base64 string.
+      properties:
+        data:
+          type: string
+          description: Base64-encoded document data.
+
+    Document:
+      type: object
+      description: Document to extract text from.
+      required:
+        - filetype
+        - base64
+      properties:
+        filetype:
+          $ref: "#/components/schemas/Filetype"
+        filetype_config:
+          $ref: "#/components/schemas/FiletypeConfig"
+        base64:
+          $ref: "#/components/schemas/Base64Document"
+
+    ExtractRequest:
+      type: object
+      description: Request to extract text from a document.
+      required:
+        - document
+        - webhook
+        - remote_id
+      properties:
+        document:
+          $ref: "#/components/schemas/Document"
+        webhook:
+          type: string
+          description: Webhook URL to call with results.
+        remote_id:
+          $ref: "#/components/schemas/RemoteID"
+
+    ExtractAcceptedResponse:
+      type: object
+      description: Response when an extraction request is accepted.
+      required:
+        - id
+        - status
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        status:
+          $ref: "#/components/schemas/Status"
+
+    ExtractMetadata:
+      type: object
+      description: Metadata extracted from the document.
+      additionalProperties: true
+
+    StateResponse:
+      type: object
+      description: All data regarding the state of the API.
+      required:
+        - endpoint
+        - process_available
+        - supported_filetypes
+      properties:
+        endpoint:
+          type: string
+          description: Self-reported endpoint.
+        process_available:
+          type: integer
+          description: Number of available processing slots.
+        process_queued:
+          type: integer
+          description: Number of queued requests.
+        supported_filetypes:
+          type: array
+          items:
+            type: string
+          description: List of supported file types.
+        tika_endpoint:
+          type: string
+          description: Tika REST API endpoint.
+
+    Error:
+      type: object
+      description: API error.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string

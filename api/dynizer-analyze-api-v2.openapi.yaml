@@ -1,0 +1,727 @@
+openapi: 3.1.0
+info:
+  version: 0.1.0
+  title: analyze-api-v2
+  description: 'Text-analysis service (analyze-core 4-stage pipeline) for pipeline-api.
+
+
+    pipeline-api dispatches `analyze_v2` work with a single `POST /analyze` carrying
+    the document inline — either pre-split `segments` (from the split step) or raw
+    `text`/`document`. `/analyze` dispatches the 4-stage pipeline to a Celery worker,
+    and the worker POSTs the result to the `webhook` URL. Inbound requests require
+    a valid Dynizer JWT or the pipeline-api shared secret.'
+  termsOfService: TODO
+  contact:
+    name: Consono
+    email: info@consono.ai
+    url: https://consono.ai/
+  license:
+    name: TODO
+tags:
+- name: analyze
+  description: Submit text-analysis work.
+- name: health
+  description: Liveness.
+- name: state
+  description: Capacity and per-stage model availability.
+servers:
+- url: /
+  description: Current host
+paths:
+  /healthz:
+    get:
+      tags:
+      - health
+      summary: Healthz
+      operationId: healthz
+      responses:
+        '200':
+          $ref: '#/components/responses/HealthCheckResponse'
+  /state:
+    get:
+      tags:
+      - state
+      summary: State
+      operationId: getState
+      responses:
+        '200':
+          $ref: '#/components/responses/StateInfoResponse'
+      security:
+      - HTTPBearer: []
+  /analyze:
+    post:
+      tags:
+      - analyze
+      summary: Post Analyze
+      operationId: postAnalyze
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+        required: true
+      responses:
+        '200':
+          $ref: '#/components/responses/AnalyzeAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/NoUsableTextResponse'
+        '422':
+          $ref: '#/components/responses/ValidationErrorResponse'
+      callbacks:
+        analysis_webhook:
+          '{$request.body#/webhook}':
+            post:
+              summary: Analysis result delivered to the caller's webhook
+              operationId: analysisWebhook
+              requestBody:
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/WebhookResult'
+                required: true
+              responses:
+                '200':
+                  description: Successful Response
+                  content:
+                    application/json:
+                      schema:
+                        $ref: '#/components/schemas/WebhookResult'
+                '422':
+                  $ref: '#/components/responses/ValidationErrorResponse'
+      security:
+      - HTTPBearer: []
+  /analyze/{job_id}:
+    get:
+      tags:
+      - analyze
+      summary: Get Analyze Status
+      description: Poll the status and result of a submitted analysis job.
+      operationId: getAnalyzeStatus
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          $ref: '#/components/responses/JobStatusOKResponse'
+        '404':
+          $ref: '#/components/responses/UnknownJobResponse'
+        '422':
+          $ref: '#/components/responses/ValidationErrorResponse'
+components:
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+  responses:
+    HealthCheckResponse:
+      description: Successful Response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HealthResponse'
+    StateInfoResponse:
+      description: Successful Response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StateResponse'
+    AnalyzeAcceptedResponse:
+      description: Successful Response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AnalyzeResponse'
+    JobStatusOKResponse:
+      description: Successful Response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/JobStatusResponse'
+    NoUsableTextResponse:
+      description: No usable document text.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnknownJobResponse:
+      description: Unknown job ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationErrorResponse:
+      description: Validation Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPValidationError'
+  schemas:
+    ActionRecord:
+      properties:
+        instance_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Instance Id
+        source_text:
+          type: string
+          title: Source Text
+        original_text:
+          type: string
+          title: Original Text
+        action_name:
+          type: string
+          title: Action Name
+        segments:
+          items:
+            $ref: '#/components/schemas/Segment'
+          type: array
+          title: Segments
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+        confidence_per_stage:
+          anyOf:
+          - additionalProperties:
+              type: number
+            type: object
+          - type: 'null'
+          title: Confidence Per Stage
+        language:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language
+        job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id
+        reviewed:
+          type: boolean
+          title: Reviewed
+          default: false
+      type: object
+      required:
+      - source_text
+      - original_text
+      - action_name
+      - segments
+      - confidence
+      title: ActionRecord
+    AnalyzeConfig:
+      properties:
+        mode:
+          type: string
+          enum:
+          - full
+          - decomposition
+          - action
+          - segments
+          - entities
+          title: Mode
+          description: Stage selector for the analyze-core pipeline. 'full' = decomposition
+            + per-clause action/segments/entities (stages 1-4). 'decomposition' =
+            stage 1 only (clauses, no action records). 'action' = stage 2 only, input
+            treated as one clause. 'segments' = stages 2-3. 'entities' = stages 2-4.
+          default: full
+        output_format:
+          type: string
+          enum:
+          - v1
+          - v2
+          title: Output Format
+          description: Result shape on the webhook. 'v1' wraps action_records under
+            sections[0] (default, parsed by pipeline-api's v1 plugins); 'v2' is the
+            flat action_records document.
+          default: v1
+        language:
+          anyOf:
+          - $ref: '#/components/schemas/LanguageConfig'
+          - type: 'null'
+          description: Language routing; omit to auto-detect from the text.
+        segments:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/InputSegment'
+            type: array
+          - type: 'null'
+          title: Segments
+          description: Pre-split units forwarded by pipeline-api's split flow. Typically
+            arrives under config.segments rather than top-level segments.
+      type: object
+      title: AnalyzeConfig
+      description: 'Recognised ``config`` keys for an analyze request.
+
+
+        Only the fields below change pipeline behaviour.'
+    AnalyzeOutputV1:
+      properties:
+        document:
+          $ref: '#/components/schemas/DocumentV1'
+      type: object
+      required:
+      - document
+      title: AnalyzeOutputV1
+      description: 'Legacy output (`config.output_format = "v1"`): wrapped in sections[0].'
+    AnalyzeOutputV2:
+      properties:
+        document:
+          $ref: '#/components/schemas/DocumentV2'
+      type: object
+      required:
+      - document
+      title: AnalyzeOutputV2
+      description: 'Default output (`config.output_format = "v2"`): flat action_records.'
+    AnalyzeRequest:
+      properties:
+        type:
+          type: string
+          title: Type
+          default: background
+        remote_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Remote Id
+        webhook:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Webhook
+        flow_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Flow Name
+        config:
+          $ref: '#/components/schemas/AnalyzeConfig'
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        document:
+          anyOf:
+          - $ref: '#/components/schemas/DocumentInput'
+          - type: 'null'
+        segments:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/InputSegment'
+            type: array
+          - type: 'null'
+          title: Segments
+      type: object
+      title: AnalyzeRequest
+    AnalyzeResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+      type: object
+      required:
+      - id
+      title: AnalyzeResponse
+    DocumentInput:
+      properties:
+        text:
+          anyOf:
+          - type: string
+          - $ref: '#/components/schemas/TextData'
+          - type: 'null'
+          title: Text
+          description: 'Inline text or a Dynizer TextDocument ``{data: ...}`` object.'
+        private:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Private
+          description: Legacy private block; may carry text/content/body/data keys.
+        filetype_configuration:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Filetype Configuration
+          description: Filetype configuration forwarded from pipeline-api.
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+          description: Legacy content field.
+        body:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Body
+          description: Legacy body field.
+        data:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Data
+          description: Legacy data field.
+      type: object
+      title: DocumentInput
+      description: 'Incoming document envelope (Dynizer TextDocument or legacy formats).
+
+
+        pipeline-api sends a Dynizer TextDocument with ``text.data``; older
+
+        contracts may nest content under ``private``.  The router''s
+
+        ``resolve_text()`` probes all known locations.'
+    DocumentV1:
+      properties:
+        text:
+          type: string
+          title: Text
+        language:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language
+        sections:
+          items:
+            $ref: '#/components/schemas/SectionV1'
+          type: array
+          title: Sections
+      type: object
+      required:
+      - text
+      title: DocumentV1
+    DocumentV2:
+      properties:
+        text:
+          type: string
+          title: Text
+        language:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language
+        clauses:
+          items:
+            type: string
+          type: array
+          title: Clauses
+        action_records:
+          items:
+            $ref: '#/components/schemas/ActionRecord'
+          type: array
+          title: Action Records
+      type: object
+      required:
+      - text
+      title: DocumentV2
+    ErrorResponse:
+      properties:
+        detail:
+          type: string
+          title: Detail
+          description: Human-readable error detail.
+      type: object
+      required:
+      - detail
+      title: ErrorResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          description: Liveness marker.
+          default: ok
+        flow_name:
+          type: string
+          title: Flow Name
+          description: Configured flow name, e.g. analyze_v2.
+        model_dir_present:
+          type: boolean
+          title: Model Dir Present
+          description: Whether the model dir exists on disk.
+      type: object
+      required:
+      - flow_name
+      - model_dir_present
+      title: HealthResponse
+    InputSegment:
+      properties:
+        text:
+          type: string
+          title: Text
+        index:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Index
+          description: 0-based position in the document.
+        start:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Start
+          description: Start char offset into the source text.
+        end:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: End
+          description: End char offset into the source text.
+      type: object
+      required:
+      - text
+      title: InputSegment
+      description: 'One pre-split unit from the split step.
+
+
+        ``text`` is the sentence/clause-sized unit fed to the pipeline; ``index``
+        /
+
+        ``start`` / ``end`` (char offsets into the source) are used only to order
+        the
+
+        segments on merge. A bare string is accepted and coerced to ``{text: ...}``.'
+    JobStatusResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: Job ID.
+        status:
+          type: string
+          title: Status
+          description: '"PENDING" | "STARTED" | "SUCCESS" | "FAILED"'
+        output:
+          anyOf:
+          - $ref: '#/components/schemas/AnalyzeOutputV2'
+          - $ref: '#/components/schemas/AnalyzeOutputV1'
+          - type: 'null'
+          title: Output
+          description: Analysis output on SUCCESS; null otherwise.
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+          description: Error message on FAILED.
+      type: object
+      required:
+      - id
+      - status
+      title: JobStatusResponse
+    LanguageConfig:
+      properties:
+        target_languages:
+          items:
+            type: string
+          type: array
+          title: Target Languages
+          description: Declared target languages, e.g. ['en']. First entry routes
+            model selection; if empty the language is auto-detected.
+      type: object
+      title: LanguageConfig
+      description: 'Language routing for the pipeline.
+
+
+        ``target_languages[0]`` selects the per-language promoted model set
+
+        (see model_resolver.model_dirs_for_language); when absent the worker
+
+        auto-detects the language from the text.'
+    SectionV1:
+      properties:
+        clauses:
+          items:
+            type: string
+          type: array
+          title: Clauses
+        action_records:
+          items:
+            $ref: '#/components/schemas/ActionRecord'
+          type: array
+          title: Action Records
+      type: object
+      title: SectionV1
+    Segment:
+      properties:
+        ct:
+          type: string
+          title: Ct
+          description: 'Segment type: who, what, where, when'
+        tokens:
+          items:
+            $ref: '#/components/schemas/Token'
+          type: array
+          title: Tokens
+      type: object
+      required:
+      - ct
+      - tokens
+      title: Segment
+    StateResponse:
+      properties:
+        endpoint:
+          type: string
+          title: Endpoint
+          description: This service's own registration endpoint.
+        process_available:
+          type: integer
+          title: Process Available
+          description: 'Free Celery concurrency: max(0, total_concurrency - active).'
+        process_queued:
+          type: integer
+          title: Process Queued
+          description: Reserved (queued) Celery tasks.
+        flow_names:
+          items:
+            type: string
+          type: array
+          title: Flow Names
+          description: Flow names this analyzer serves.
+        models_loaded:
+          additionalProperties:
+            type: boolean
+          type: object
+          title: Models Loaded
+          description: Per-stage presence of a fine-tuned model dir on disk.
+      type: object
+      required:
+      - endpoint
+      - process_available
+      - process_queued
+      - flow_names
+      - models_loaded
+      title: StateResponse
+    TextData:
+      properties:
+        data:
+          type: string
+          title: Data
+          description: Extracted plain-text content.
+      type: object
+      required:
+      - data
+      title: TextData
+      description: 'Dynizer TextDocument nested text object: ``{data: "<extracted
+        text>"}``.'
+    Token:
+      properties:
+        text:
+          type: string
+          title: Text
+        label:
+          type: string
+          title: Label
+          default: ''
+      type: object
+      required:
+      - text
+      title: Token
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+          type: string
+          description: The input value that caused the error.
+        ctx:
+          type: object
+          title: Context
+          additionalProperties:
+            type: string
+          description: Additional error context.
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WebhookResult:
+      properties:
+        id:
+          type: string
+          title: Id
+        remote_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Remote Id
+        status:
+          type: string
+          title: Status
+          description: '"SUCCESS" | "FAILED"'
+        output:
+          anyOf:
+          - $ref: '#/components/schemas/AnalyzeOutputV2'
+          - $ref: '#/components/schemas/AnalyzeOutputV1'
+          - type: 'null'
+          title: Output
+          description: Mapped analysis output on SUCCESS; null on FAILED.
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+          description: Error message on FAILED.
+        log:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Log
+          description: Traceback on FAILED.
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+      type: object
+      required:
+      - id
+      - status
+      title: WebhookResult
+      description: 'Doc-only model describing the webhook callback body with a typed
+        output.
+
+
+        Distinct from ``WebhookPayload`` so enriching the OpenAPI callback never
+
+        risks re-validating the live payload the worker delivers.'
