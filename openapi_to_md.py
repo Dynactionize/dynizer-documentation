@@ -2,27 +2,32 @@
 """Render an OpenAPI JSON/YAML spec into a Markdown document.
 
 Usage:
-    python scripts/openapi_to_md.py [INPUT] [OUTPUT]
+    python openapi_to_md.py [OPTIONS] [INPUT] [OUTPUT]
 
-    INPUT   Path to OpenAPI JSON or YAML file.
-            Default: spec/dynizer-analyze-api-v2.openapi.json
-    OUTPUT  Path for the generated Markdown.
-            Default: spec/dynizer-analyze-api-v2.openapi.md
+Positional arguments:
+    INPUT   Path to OpenAPI JSON or YAML file (or directory of them).
+    OUTPUT  Path for the generated Markdown (or output directory).
+
+Options:
+    -i, --input PATH    Input file or directory (overrides positional INPUT).
+    -o, --output PATH   Output file or directory (overrides positional OUTPUT).
+    --input-dir PATH    Directory of OpenAPI specs to convert (all .json/.yaml/.yml).
+    --output-dir PATH   Directory for generated Markdown files.
+
+When a directory is given as input (via --input-dir or -i), every OpenAPI
+spec (.json, .yaml, .yml) in that directory is converted.  The output
+directory defaults to the same directory unless --output-dir / -o is given.
 
 No external dependencies beyond PyYAML (already in the project).
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
 
 import yaml
-
-ROOT = Path(__file__).resolve().parent.parent
-
-DEFAULT_INPUT = ROOT / "spec/dynizer-analyze-api-v2.openapi.json"
-DEFAULT_OUTPUT = ROOT / "spec/dynizer-analyze-api-v2.openapi.md"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -280,14 +285,11 @@ def render(spec: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> None:
-    input_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_INPUT
-    output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_OUTPUT
+SPEC_EXTENSIONS = {".json", ".yaml", ".yml"}
 
-    if not input_path.exists():
-        print(f"ERROR: {input_path} not found. Run dump_openapi.py first.", file=sys.stderr)
-        sys.exit(1)
 
+def _convert_file(input_path: Path, output_path: Path) -> None:
+    """Convert a single OpenAPI spec file to Markdown."""
     text = input_path.read_text()
     if input_path.suffix == ".json":
         spec = json.loads(text)
@@ -295,8 +297,55 @@ def main() -> None:
         spec = yaml.safe_load(text)
 
     md = render(spec)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(md)
     print(f"wrote {output_path}")
+
+
+def _md_output_for(input_path: Path, output_dir: Path) -> Path:
+    """Derive the .md output path from an input spec path."""
+    return output_dir / (input_path.stem + ".md")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Render OpenAPI JSON/YAML specs into Markdown.",
+    )
+    parser.add_argument("input", nargs="?", help="Input file or directory")
+    parser.add_argument("output", nargs="?", help="Output file or directory")
+    parser.add_argument("-i", "--input-file", dest="input_opt", help="Input file or directory")
+    parser.add_argument("-o", "--output-file", dest="output_opt", help="Output file or directory")
+    parser.add_argument("--input-dir", help="Directory of OpenAPI specs to convert")
+    parser.add_argument("--output-dir", help="Directory for generated Markdown files")
+    args = parser.parse_args()
+
+    # Resolve input
+    input_path = Path(args.input_dir or args.input_opt or args.input or ".")
+    output_path_arg = args.output_dir or args.output_opt or args.output
+
+    if input_path.is_dir():
+        # Batch mode: convert all spec files in the directory
+        specs = sorted(
+            f for f in input_path.iterdir() if f.suffix in SPEC_EXTENSIONS
+        )
+        if not specs:
+            print(f"ERROR: no OpenAPI specs found in {input_path}", file=sys.stderr)
+            sys.exit(1)
+        out_dir = Path(output_path_arg) if output_path_arg else input_path
+        for spec_file in specs:
+            _convert_file(spec_file, _md_output_for(spec_file, out_dir))
+    else:
+        # Single file mode
+        if not input_path.exists():
+            print(f"ERROR: {input_path} not found.", file=sys.stderr)
+            sys.exit(1)
+        if output_path_arg:
+            out = Path(output_path_arg)
+            if out.is_dir() or output_path_arg.endswith("/"):
+                out = _md_output_for(input_path, out)
+        else:
+            out = input_path.with_suffix(".md")
+        _convert_file(input_path, out)
 
 
 if __name__ == "__main__":

@@ -2,794 +2,182 @@
 
 Apache Tika wrapper API for text extraction
 
-## Authentication
+| Field | Value |
+|-------|-------|
+| Version | 1.0.0 |
+| Contact | Consono <info@consono.ai> (https://consono.ai) |
 
+## Tags
 
+| Name | Description |
+|------|-------------|
+| Extract | Text extraction from documents |
+| State | State of the API |
+| Health check | Checks regarding the health of the service |
 
-## Security Schemes
+## Endpoints
 
-| Name              | Type              | Description              | Scheme              | Bearer Format             |
-|-------------------|-------------------|--------------------------|---------------------|---------------------------|
-| bearerAuth | http |  | bearer | JWT |
+### `POST /extract`
 
-## APIs
+Tags: `Extract`
 
-### Endpoint: /extract
-
-`POST /extract`
+Operation ID: `postExtract`
 
 Submit a document for text extraction
 
-
-  
-
 **Responses**
 
-+ `202`: 
-        [PostExtractResponse](#postextractresponse)
+- `202`: Extract request accepted — [ExtractAcceptedResponse](#extractacceptedresponse)
+- `400`: Bad request. — [Error](#error)
+- `503`: Service unavailable. — [Error](#error)
+- `default`: Unexpected error. — [Error](#error)
 
-    
- 
-+ `400`: 
-        [400ErrorResponse](#400errorresponse)
+---
 
-    
- 
-+ `503`: 
-        [503ErrorResponse](#503errorresponse)
+### `GET /state`
 
-    
- 
-+ `default`: 
-        [DefaultErrorResponse](#defaulterrorresponse)
+Tags: `State`
 
-    
- 
-  
- 
-### Endpoint: /state
-
-`GET /state`
+Operation ID: `getState`
 
 Get state of the extract-text-api
 
-
-  
-
 **Responses**
 
-+ `200`: 
-        [GetStateResponse](#getstateresponse)
+- `200`: Get API state response — [StateResponse](#stateresponse)
+- `default`: Unexpected error. — [Error](#error)
 
-    
- 
-+ `default`: 
-        [DefaultErrorResponse](#defaulterrorresponse)
+---
 
-    
- 
-  
- 
-### Endpoint: /healthz
+### `GET /healthz`
 
-`GET /healthz`
+Tags: `Health check`
+
+Operation ID: `getHealthz`
 
 k8s style health check. Returns 200 if running correctly
 
 
-
-  
-
 **Responses**
 
-+ `200`: 
-        
+- `200`: Health check successful
+- `503`: Service unavailable. — [Error](#error)
+- `default`: Unexpected error. — [Error](#error)
 
-    
- 
-+ `503`: 
-        [503ErrorResponse](#503errorresponse)
-
-    
- 
-+ `default`: 
-        [DefaultErrorResponse](#defaulterrorresponse)
-
-    
- 
-  
- 
 ---
 
-# Components
+## Response Components
 
-## DefaultErrorResponse
-
+### DefaultErrorResponse
 
 Unexpected error.
 
+Content (`application/json`): [Error](#error)
 
-
-
-### application/json
-schema:
-
-  
-  [Error](#error)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## ID
-
-
-ID of an object.
-
-
-
-## RemoteID
-
-
-Remote ID from the API that requested the extraction.
-
-
-
-## Status
-
-
-Status of an extraction. Can be one of QUEUED|RUNNING|FAILED|SUCCESS.
-
-
-
-## Filetype
-
-
-Filetype of the document.
-
-
-
-## FiletypeConfig
-
-
-
-
-## Base64Document
-
-
-Document serialized in base64 string.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| data | string | string |
-
-## Document
-
-
-Document to extract text from.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| filetype |  | [Filetype](#filetype) |
-| filetype_config |  | [FiletypeConfig](#filetypeconfig) |
-| base64 |  | [Base64Document](#base64document) |
-
-## ExtractRequest
-
-
-Request to extract text from a document.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| document |  | [Document](#document) |
-| webhook | string | string |
-| remote_id |  | [RemoteID](#remoteid) |
-
-## ExtractAcceptedResponse
-
-
-Response when an extraction request is accepted.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| id |  | [ID](#id) |
-| status |  | [Status](#status) |
-
-## ExtractMetadata
-
-
-Metadata extracted from the document.
-
-
-
-## StateResponse
-
-
-All data regarding the state of the API.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| endpoint | string | string |
-| process_available | integer | integer |
-| process_queued | integer | integer |
-| supported_filetypes | array | array |
-| tika_endpoint | string | string |
-
-## Error
-
-
-API error.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| code | integer | integer |
-| message | string | string |
-## 400ErrorResponse
-
+### 400ErrorResponse
 
 Bad request.
 
+Content (`application/json`): [Error](#error)
 
-
-
-### application/json
-schema:
-
-  
-  [Error](#error)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## ID
-
-
-ID of an object.
-
-
-
-## RemoteID
-
-
-Remote ID from the API that requested the extraction.
-
-
-
-## Status
-
-
-Status of an extraction. Can be one of QUEUED|RUNNING|FAILED|SUCCESS.
-
-
-
-## Filetype
-
-
-Filetype of the document.
-
-
-
-## FiletypeConfig
-
-
-
-
-## Base64Document
-
-
-Document serialized in base64 string.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| data | string | string |
-
-## Document
-
-
-Document to extract text from.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| filetype |  | [Filetype](#filetype) |
-| filetype_config |  | [FiletypeConfig](#filetypeconfig) |
-| base64 |  | [Base64Document](#base64document) |
-
-## ExtractRequest
-
-
-Request to extract text from a document.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| document |  | [Document](#document) |
-| webhook | string | string |
-| remote_id |  | [RemoteID](#remoteid) |
-
-## ExtractAcceptedResponse
-
-
-Response when an extraction request is accepted.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| id |  | [ID](#id) |
-| status |  | [Status](#status) |
-
-## ExtractMetadata
-
-
-Metadata extracted from the document.
-
-
-
-## StateResponse
-
-
-All data regarding the state of the API.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| endpoint | string | string |
-| process_available | integer | integer |
-| process_queued | integer | integer |
-| supported_filetypes | array | array |
-| tika_endpoint | string | string |
-
-## Error
-
-
-API error.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| code | integer | integer |
-| message | string | string |
-## 503ErrorResponse
-
+### 503ErrorResponse
 
 Service unavailable.
 
+Content (`application/json`): [Error](#error)
 
-
-
-### application/json
-schema:
-
-  
-  [Error](#error)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## ID
-
-
-ID of an object.
-
-
-
-## RemoteID
-
-
-Remote ID from the API that requested the extraction.
-
-
-
-## Status
-
-
-Status of an extraction. Can be one of QUEUED|RUNNING|FAILED|SUCCESS.
-
-
-
-## Filetype
-
-
-Filetype of the document.
-
-
-
-## FiletypeConfig
-
-
-
-
-## Base64Document
-
-
-Document serialized in base64 string.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| data | string | string |
-
-## Document
-
-
-Document to extract text from.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| filetype |  | [Filetype](#filetype) |
-| filetype_config |  | [FiletypeConfig](#filetypeconfig) |
-| base64 |  | [Base64Document](#base64document) |
-
-## ExtractRequest
-
-
-Request to extract text from a document.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| document |  | [Document](#document) |
-| webhook | string | string |
-| remote_id |  | [RemoteID](#remoteid) |
-
-## ExtractAcceptedResponse
-
-
-Response when an extraction request is accepted.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| id |  | [ID](#id) |
-| status |  | [Status](#status) |
-
-## ExtractMetadata
-
-
-Metadata extracted from the document.
-
-
-
-## StateResponse
-
-
-All data regarding the state of the API.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| endpoint | string | string |
-| process_available | integer | integer |
-| process_queued | integer | integer |
-| supported_filetypes | array | array |
-| tika_endpoint | string | string |
-
-## Error
-
-
-API error.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| code | integer | integer |
-| message | string | string |
-## PostExtractResponse
-
+### PostExtractResponse
 
 Extract request accepted
 
+Content (`application/json`): [ExtractAcceptedResponse](#extractacceptedresponse)
 
-
-
-### application/json
-schema:
-
-  
-  [ExtractAcceptedResponse](#extractacceptedresponse)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## ID
-
-
-ID of an object.
-
-
-
-## RemoteID
-
-
-Remote ID from the API that requested the extraction.
-
-
-
-## Status
-
-
-Status of an extraction. Can be one of QUEUED|RUNNING|FAILED|SUCCESS.
-
-
-
-## Filetype
-
-
-Filetype of the document.
-
-
-
-## FiletypeConfig
-
-
-
-
-## Base64Document
-
-
-Document serialized in base64 string.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| data | string | string |
-
-## Document
-
-
-Document to extract text from.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| filetype |  | [Filetype](#filetype) |
-| filetype_config |  | [FiletypeConfig](#filetypeconfig) |
-| base64 |  | [Base64Document](#base64document) |
-
-## ExtractRequest
-
-
-Request to extract text from a document.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| document |  | [Document](#document) |
-| webhook | string | string |
-| remote_id |  | [RemoteID](#remoteid) |
-
-## ExtractAcceptedResponse
-
-
-Response when an extraction request is accepted.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| id |  | [ID](#id) |
-| status |  | [Status](#status) |
-
-## ExtractMetadata
-
-
-Metadata extracted from the document.
-
-
-
-## StateResponse
-
-
-All data regarding the state of the API.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| endpoint | string | string |
-| process_available | integer | integer |
-| process_queued | integer | integer |
-| supported_filetypes | array | array |
-| tika_endpoint | string | string |
-
-## Error
-
-
-API error.
-
-
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| code | integer | integer |
-| message | string | string |
-## GetStateResponse
-
+### GetStateResponse
 
 Get API state response
 
+Content (`application/json`): [StateResponse](#stateresponse)
 
 
+## Schemas
 
-### application/json
-schema:
-
-  
-  [StateResponse](#stateresponse)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## ID
-
+### ID
 
 ID of an object.
 
-
-
-## RemoteID
-
+### RemoteID
 
 Remote ID from the API that requested the extraction.
 
-
-
-## Status
-
+### Status
 
 Status of an extraction. Can be one of QUEUED|RUNNING|FAILED|SUCCESS.
 
-
-
-## Filetype
-
+### Filetype
 
 Filetype of the document.
 
+### FiletypeConfig
 
-
-## FiletypeConfig
-
-
-
-
-## Base64Document
-
+### Base64Document
 
 Document serialized in base64 string.
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| data | string |  | Base64-encoded document data. |
 
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| data | string | string |
-
-## Document
-
+### Document
 
 Document to extract text from.
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| filetype | [Filetype](#filetype) | yes |  |
+| filetype_config | [FiletypeConfig](#filetypeconfig) |  |  |
+| base64 | [Base64Document](#base64document) | yes |  |
 
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| filetype |  | [Filetype](#filetype) |
-| filetype_config |  | [FiletypeConfig](#filetypeconfig) |
-| base64 |  | [Base64Document](#base64document) |
-
-## ExtractRequest
-
+### ExtractRequest
 
 Request to extract text from a document.
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| document | [Document](#document) | yes |  |
+| webhook | string | yes | Webhook URL to call with results. |
+| remote_id | [RemoteID](#remoteid) | yes |  |
 
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| document |  | [Document](#document) |
-| webhook | string | string |
-| remote_id |  | [RemoteID](#remoteid) |
-
-## ExtractAcceptedResponse
-
+### ExtractAcceptedResponse
 
 Response when an extraction request is accepted.
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | [ID](#id) | yes |  |
+| status | [Status](#status) | yes |  |
 
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| id |  | [ID](#id) |
-| status |  | [Status](#status) |
-
-## ExtractMetadata
-
+### ExtractMetadata
 
 Metadata extracted from the document.
 
-
-
-## StateResponse
-
+### StateResponse
 
 All data regarding the state of the API.
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| endpoint | string | yes | Self-reported endpoint. |
+| process_available | integer | yes | Number of available processing slots. |
+| process_queued | integer |  | Number of queued requests. |
+| supported_filetypes | array of string | yes | List of supported file types. |
+| tika_endpoint | string |  | Tika REST API endpoint. |
 
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| endpoint | string | string |
-| process_available | integer | integer |
-| process_queued | integer | integer |
-| supported_filetypes | array | array |
-| tika_endpoint | string | string |
-
-## Error
-
+### Error
 
 API error.
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| code | integer | yes |  |
+| message | string | yes |  |
 
-| Field | Type | Schema Reference |
-|-------|------|------------------|
-| code | integer | integer |
-| message | string | string |

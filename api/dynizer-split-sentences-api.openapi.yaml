@@ -2,23 +2,22 @@
 openapi: 3.1.0
 info:
   version: 0.1.0
-  title: split-service
+  title: split-sentences-api
   description: 'Sentence/clause splitting analyzer for pipeline-api (the `split` flow).
 
 
     A pre-processing step modelled on text extraction: pipeline-api calls `POST /split`
     once with `{document, webhook, remote_id}`; the service acks `{id}`, sentencizes
     on a Celery worker, and POSTs `{id, remote_id, status, segments}` to the `webhook`
-    URL. Single-call and async.
-    Inbound auth was removed — reached only over the internal network. Designed as
-    the split step in `Extract -> Split -> Analyze -> Plugins`; see `docs/verify_pipeline_chaining.md`.'
-  termsOfService: TODO
+    URL. Single-call and async. Inbound auth was removed — reached only over the internal
+    network. Designed as the split step in `Extract -> Split -> Analyze -> Plugins`;
+    see `docs/verify_pipeline_chaining.md`.'
   contact:
     name: Consono
     email: info@consono.ai
     url: https://consono.ai/
   license:
-    name: TODO
+    name: Proprietary
 tags:
 - name: split
   description: Split a document into ordered segments.
@@ -27,15 +26,15 @@ tags:
 - name: state
   description: Capacity and configured sentencizer backend.
 servers:
-- url: http://split-service:50053
-  description: In-cluster
+- url: /
+  description: Default
 paths:
   /healthz:
     get:
       tags:
       - health
       summary: Healthz
-      operationId: healthz_healthz_get
+      operationId: healthz
       responses:
         '200':
           $ref: '#/components/responses/HealthCheckResponse'
@@ -44,7 +43,7 @@ paths:
       tags:
       - state
       summary: State
-      operationId: state_state_get
+      operationId: getState
       responses:
         '200':
           $ref: '#/components/responses/StateInfoResponse'
@@ -53,7 +52,7 @@ paths:
       tags:
       - split
       summary: Post Split
-      operationId: post_split_split_post
+      operationId: submitSplit
       requestBody:
         content:
           application/json:
@@ -72,7 +71,7 @@ paths:
           '{$request.body#/webhook}':
             post:
               summary: Segments delivered to the caller's webhook
-              operationId: split_webhook__request_body__webhook__post
+              operationId: splitWebhook
               requestBody:
                 content:
                   application/json:
@@ -123,6 +122,47 @@ components:
           schema:
             $ref: '#/components/schemas/HTTPValidationError'
   schemas:
+    DocumentEnvelope:
+      properties:
+        text:
+          anyOf:
+          - $ref: '#/components/schemas/DocumentText'
+          - type: string
+          - type: 'null'
+          title: Text
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+        body:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Body
+        data:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Data
+      type: object
+      title: DocumentEnvelope
+      description: 'Minimal typed shape for the ``document`` field.
+
+
+        pipeline-api sends ``{"text": {"data": "<text>"}}``. Other keys
+
+        (``content``, ``body``, ``data``) are also probed by ``resolve_text``.'
+    DocumentText:
+      properties:
+        data:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Data
+      type: object
+      title: DocumentText
+      description: The ``text`` sub-object inside a document envelope.
     ErrorResponse:
       properties:
         detail:
@@ -162,6 +202,15 @@ components:
       - flow_name
       - backend
       title: HealthResponse
+    LanguageConfig:
+      properties:
+        target_languages:
+          items:
+            type: string
+          type: array
+          title: Target Languages
+      type: object
+      title: LanguageConfig
     SegmentModel:
       properties:
         index:
@@ -187,14 +236,51 @@ components:
       - start
       - end
       title: SegmentModel
+    SentencizerConfig:
+      properties:
+        backend:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Backend
+      type: object
+      title: SentencizerConfig
+    SplitConfig:
+      properties:
+        language:
+          anyOf:
+          - $ref: '#/components/schemas/LanguageConfig'
+          - type: 'null'
+        sentencizer:
+          anyOf:
+          - $ref: '#/components/schemas/SentencizerConfig'
+          - type: 'null'
+      type: object
+      title: SplitConfig
+      description: Optional per-request config overlay.
+    SplitMetadata:
+      properties:
+        language:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language
+          description: Detected or requested language code.
+        count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Count
+          description: Number of segments produced.
+      type: object
+      title: SplitMetadata
+      description: Extraction-style metadata returned with the webhook result.
     SplitRequest:
       properties:
         document:
           anyOf:
-          - additionalProperties: true
-            type: object
+          - $ref: '#/components/schemas/DocumentEnvelope'
           - type: 'null'
-          title: Document
         text:
           anyOf:
           - type: string
@@ -211,9 +297,9 @@ components:
           - type: 'null'
           title: Remote Id
         config:
-          additionalProperties: true
-          type: object
-          title: Config
+          anyOf:
+          - $ref: '#/components/schemas/SplitConfig'
+          - type: 'null'
       type: object
       title: SplitRequest
       description: "A split dispatch, e.g.::\n\n    {\"document\": {\"text\": {\"\
@@ -311,10 +397,8 @@ components:
           description: Ordered segments on SUCCESS; null on FAILED.
         metadata:
           anyOf:
-          - additionalProperties: true
-            type: object
+          - $ref: '#/components/schemas/SplitMetadata'
           - type: 'null'
-          title: Metadata
           description: Extraction-style metadata, e.g. {language, count}.
         error:
           anyOf:
